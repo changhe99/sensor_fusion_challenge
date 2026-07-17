@@ -1,0 +1,22 @@
+bmi088_node:
+  ros__parameters:
+    frame_id: imu_link
+    topic: imu/data_raw
+    publish_rate_hz: 200.0
+
+    # Accelerometer: range in g (3/6/12/24), ODR in Hz (12/25/50/100/200/400/800/1600)
+    acc_range_g: 6
+    acc_odr_hz: 200
+
+    # Gyroscope: range in dps (2000/1000/500/250/125), ODR in Hz (2000/1000/400/200/100)
+    gyro_range_dps: 2000
+    gyro_odr_hz: 200
+
+    # Shuttle board supply (BMI088 is 1.8 V / 3.3 V only — never 5 V).
+    vdd: 3.3
+    vddio: 3.3
+
+    # Diagonal measurement noise. Replace with values estimated from a static
+    # recording (variance of each axis while the board sits still).
+    linear_acceleration_variance: 0.01
+    angular_velocity_variance: 0.001

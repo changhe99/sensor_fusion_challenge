@@ -1,0 +1,40 @@
+# Ubuntu 22.04 / ROS 2 Humble dev container for the BMI088 driver.
+# Usage:
+#   docker compose build
+#   docker compose run --rm ros        # interactive shell in /ws
+services:
+  ros:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: sensor_fusion:humble
+    container_name: sensor_fusion
+
+    # USB access to the Bosch Application Board (APP3.1, coines_bridge over
+    # CDC-ACM). coinespy identifies the board via libudev, so ALL THREE are
+    # needed or get_board_info() returns zeros and reads fail:
+    #   - privileged + /dev/bus/usb  -> USB enumeration
+    #   - /run/udev (ro)             -> libudev device metadata (the key one)
+    #   - /dev/ttyACM0 device        -> the board's serial port
+    privileged: true
+    volumes:
+      - .:/ws
+      - /dev/bus/usb:/dev/bus/usb
+      - /run/udev:/run/udev:ro
+    devices:
+      # The Bosch board's CDC-ACM port. Adjust if it enumerates elsewhere
+      # (find it with: udevadm info -q property -n /dev/ttyACM0 | grep 108c).
+      - /dev/ttyACM0:/dev/ttyACM0
+
+    # host networking so ROS 2 DDS discovery works with anything on the host,
+    # and host IPC so Fast DDS shared-memory transport works ACROSS containers
+    # (without ipc:host, a separate container sees the topic but gets no data).
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=0
+
+    stdin_open: true
+    tty: true
+    working_dir: /ws
+    command: bash
