@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Fast DDS (ROS 2 Humble default RMW) profile: use UDPv4 only, no shared memory.
+
+  Why: Fast DDS prefers a shared-memory transport for same-host delivery. SHM
+  segments live in /dev/shm and do NOT cross the container boundary unless the
+  containers also share an IPC namespace. The result is the classic failure
+  mode: a topic is DISCOVERABLE from another container (discovery runs over UDP
+  multicast, which host networking already carries) but delivers NO DATA (the
+  subscriber cannot open the publisher's SHM segment).
+
+  Disabling the builtin transports and using an explicit UDPv4 transport routes
+  all data over UDP, so any container on the host network receives it without
+  needing ipc:host. Applied via FASTRTPS_DEFAULT_PROFILES_FILE (set in the
+  Dockerfile); is_default_profile makes it apply to every participant.
+-->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <transport_descriptors>
+      <transport_descriptor>
+        <transport_id>udp_transport</transport_id>
+        <type>UDPv4</type>
+      </transport_descriptor>
+    </transport_descriptors>
+
+    <participant profile_name="udp_only" is_default_profile="true">
+      <rtps>
+        <userTransports>
+          <transport_id>udp_transport</transport_id>
+        </userTransports>
+        <!-- Drop the default SHM plus UDP builtin set; use only the UDP transport above. -->
+        <useBuiltinTransports>false</useBuiltinTransports>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>

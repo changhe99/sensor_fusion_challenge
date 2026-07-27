@@ -10,29 +10,42 @@ services:
     image: sensor_fusion:humble
     container_name: sensor_fusion
 
-    # USB access to the Bosch Application Board (APP3.1, coines_bridge over
-    # CDC-ACM). coinespy identifies the board via libudev, so ALL THREE are
+    # USB access to two boards over CDC-ACM:
+    #   - Bosch Application Board (APP3.1, coines_bridge) for the BMI088 IMU
+    #   - ArduSimple simpleRTK2B (u-blox ZED-F9P) for GNSS
+    # coinespy identifies the Bosch board via libudev, so ALL of these are
     # needed or get_board_info() returns zeros and reads fail:
-    #   - privileged + /dev/bus/usb  -> USB enumeration
+    #   - privileged + /dev/bus/usb  -> USB enumeration (exposes all host /dev)
     #   - /run/udev (ro)             -> libudev device metadata (the key one)
-    #   - /dev/ttyACM0 device        -> the board's serial port
+    #   - /dev/serial (ro)           -> stable by-id symlinks for both boards
+    # privileged already bind-mounts the host /dev, so both ttyACM* nodes and
+    # the /dev/serial/by-id/ symlinks are visible WITHOUT an explicit `devices:`
+    # list. That also avoids a startup failure when only one board is plugged in
+    # (a `devices:` entry for an absent port makes `docker compose` error out).
+    # Enumeration order is not guaranteed with both boards attached (here
+    # IMU=ttyACM0, GNSS=ttyACM1), so the drivers default to the stable
+    # /dev/serial/by-id/ paths. Inspect with:
+    #   udevadm info -q property -n /dev/ttyACM0
     privileged: true
     volumes:
       - .:/ws
       - /dev/bus/usb:/dev/bus/usb
       - /run/udev:/run/udev:ro
-    devices:
-      # The Bosch board's CDC-ACM port. Adjust if it enumerates elsewhere
-      # (find it with: udevadm info -q property -n /dev/ttyACM0 | grep 108c).
-      - /dev/ttyACM0:/dev/ttyACM0
+      - /dev/serial:/dev/serial:ro
 
-    # host networking so ROS 2 DDS discovery works with anything on the host,
-    # and host IPC so Fast DDS shared-memory transport works ACROSS containers
-    # (without ipc:host, a separate container sees the topic but gets no data).
+    # host networking so ROS 2 DDS discovery AND data reach anything else on the
+    # host. Cross-container data delivery no longer depends on shared memory:
+    # the image forces Fast DDS to UDP-only (docker/fastdds_udp_only.xml), so a
+    # separate container just needs the same ROS_DOMAIN_ID and host networking to
+    # receive topics. (ipc:host is kept only as a harmless belt-and-suspenders;
+    # with UDP-only it is no longer required for cross-container topics.)
     network_mode: host
     ipc: host
     environment:
       - ROS_DOMAIN_ID=0
+      # Redundant with the image ENV, but makes the UDP-only transport explicit
+      # and survives if the image is rebuilt without the Dockerfile change.
+      - FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/udp_only.xml
 
     stdin_open: true
     tty: true

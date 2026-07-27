@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>gnss_driver</name>
+  <version>0.1.0</version>
+  <description>
+    ROS 2 driver for the u-blox ZED-F9P (ArduSimple simpleRTK2B). Reads the
+    receiver's NMEA stream over a swappable transport (default: USB CDC-ACM
+    serial via pyserial) and publishes sensor_msgs/NavSatFix (with RTK status
+    and covariance) plus an optional geometry_msgs/TwistWithCovarianceStamped
+    velocity.
+  </description>
+  <maintainer email="robert.he1999@gmail.com">Chang</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <!-- pyserial is the USB serial backend; install via pip, not rosdep. -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

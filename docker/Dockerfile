@@ -1,6 +1,7 @@
 # ROS 2 Humble (Ubuntu 22.04, Python 3.10) dev image for the sensor fusion
 # challenge. Host is Ubuntu 24.04; this container provides the Humble toolchain
-# and talks to the BMI088 Application Board over USB (libusb via coinespy).
+# and talks to the BMI088 Application Board over USB (libusb via coinespy) and
+# to the ArduSimple ZED-F9P GNSS over USB CDC-ACM serial (pyserial).
 FROM ros:humble-ros-base
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -8,6 +9,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-pip \
         python3-colcon-common-extensions \
+        python3-serial \
         build-essential \
         libusb-1.0-0 \
         udev \
@@ -20,6 +22,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # coinespy pulls in pytest 9, which breaks ROS Humble's launch_testing pytest
 # plugins; pin pytest <8 so both the ROS plugins and our unit tests run.
 RUN pip3 install --no-cache-dir coinespy "pytest<8"
+
+# Cross-container DDS: force Fast DDS to UDP-only (no shared memory). SHM does
+# not cross the container boundary without a shared IPC namespace, so a topic
+# published here shows up in another container but delivers no data. UDP-only
+# routes all data over the host network, so any container (same ROS_DOMAIN_ID,
+# host networking) receives it. Baked into the image so every container that
+# runs it inherits the setting. See docker/fastdds_udp_only.xml for details.
+COPY docker/fastdds_udp_only.xml /etc/fastdds/udp_only.xml
+ENV FASTRTPS_DEFAULT_PROFILES_FILE=/etc/fastdds/udp_only.xml
 
 # The repo is mounted here at runtime (see docker-compose.yml).
 WORKDIR /ws

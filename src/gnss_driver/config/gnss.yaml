@@ -1,0 +1,23 @@
+gnss_node:
+  ros__parameters:
+    frame_id: gnss_link
+    fix_topic: gnss/fix
+    velocity_topic: gnss/vel
+
+    # ZED-F9P USB serial port. Prefer the stable by-id path: with the BMI088
+    # board also plugged in, raw /dev/ttyACM* numbering is not guaranteed
+    # (here the IMU is ttyACM0 and the GNSS is ttyACM1). Baud is ignored on the
+    # USB CDC-ACM link; it only matters on the physical UART pins.
+    port: /dev/serial/by-id/usb-u-blox_AG_-_www.u-blox.com_u-blox_GNSS_receiver-if00
+    baudrate: 115200
+
+    # Timer rate for draining the serial buffer. Keep it above the receiver's
+    # NMEA output rate (typically 1-10 Hz) so fixes publish with low latency.
+    poll_rate_hz: 20.0
+
+    # Publish ENU horizontal velocity (from NMEA SOG/COG) on velocity_topic.
+    publish_velocity: true
+
+    # Fallback horizontal position sigma (m per unit HDOP), used only when the
+    # receiver isn't emitting GST sentences. Enable GST for real RTK covariance.
+    hdop_position_sigma: 1.0
