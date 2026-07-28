@@ -11,6 +11,8 @@ solution, or ``GP``/``GL``/``GA``/``GB`` per system):
 
 * **GGA** — fix quality, latitude, longitude, altitude, #satellites, HDOP.
   This is the sentence that *completes* a fix; the others just annotate it.
+  A GGA with empty position fields still yields a :class:`GnssFix`, flagged
+  ``position_valid=False`` — see that class for why.
 * **GST** — per-axis position error std-devs, turned into a diagonal
   covariance (this is what makes the fix's uncertainty trustworthy for fusion).
 * **VTG** / **RMC** — speed and course over ground, turned into an ENU
@@ -52,10 +54,15 @@ KMH_TO_MPS = 1.0 / 3.6
 class GnssFix:
     """One assembled position fix, in units the ROS node can publish directly."""
 
-    latitude: float                       # deg, WGS-84
-    longitude: float                      # deg, WGS-84
-    altitude: float                       # m, height above WGS-84 ellipsoid
+    latitude: float                       # deg, WGS-84 (NaN if not position_valid)
+    longitude: float                      # deg, WGS-84 (NaN if not position_valid)
+    altitude: float                       # m, above WGS-84 ellipsoid (NaN if invalid)
     quality: int                          # GGA fix-quality code (see above)
+    # False when the receiver is alive and streaming but has no position yet
+    # (GGA with empty lat/lon fields — typically quality 0 / no satellites).
+    # Such a fix is still reported so callers can distinguish "receiver silent"
+    # from "receiver fine, still searching"; lat/lon/alt are NaN.
+    position_valid: bool = True
     num_sv: int = 0
     hdop: Optional[float] = None
     # Row-major 3x3 ENU covariance + its type (mirrors NavSatFix).
@@ -197,10 +204,20 @@ class ZedF9P:
         except ValueError:
             quality = GGA_QUALITY_NO_FIX
 
+        num_sv = int(f[7]) if f[7].isdigit() else 0
+        hdop = _to_float(f[8])
+
         lat = _parse_deg(f[2], f[3], 2)
         lon = _parse_deg(f[4], f[5], 3)
         if lat is None or lon is None:
-            return None  # no position yet (e.g. quality 0 with empty fields)
+            # No position yet (e.g. quality 0 with empty fields). Report it
+            # rather than returning None: the satellite count is exactly the
+            # signal that distinguishes a disconnected antenna (0 sats forever)
+            # from a receiver that is acquiring. Covariance and velocity stay
+            # unset — neither means anything without a position.
+            return GnssFix(latitude=math.nan, longitude=math.nan,
+                           altitude=math.nan, quality=quality,
+                           position_valid=False, num_sv=num_sv, hdop=hdop)
 
         # NavSatFix altitude is height above the WGS-84 ellipsoid. GGA field 9
         # is orthometric height (above the geoid/MSL) and field 11 is the geoid
@@ -210,9 +227,6 @@ class ZedF9P:
         altitude = 0.0
         if msl is not None:
             altitude = msl + (geoid_sep or 0.0)
-
-        num_sv = int(f[7]) if f[7].isdigit() else 0
-        hdop = _to_float(f[8])
 
         fix = GnssFix(latitude=lat, longitude=lon, altitude=altitude,
                       quality=quality, num_sv=num_sv, hdop=hdop)

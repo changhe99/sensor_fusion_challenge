@@ -1,0 +1,50 @@
+ekf_node:
+  ros__parameters:
+    imu_topic: imu/data_raw
+    gnss_fix_topic: gnss/fix
+    gnss_vel_topic: gnss/vel
+    odom_topic: odometry/filtered
+
+    # "map" per REP 105: this estimate is globally-referenced (anchored at
+    # the first GNSS fix) and GNSS-corrected, not a raw drifting integration.
+    frame_id: map
+    child_frame_id: imu_link
+
+    output_rate_hz: 50.0
+    publish_tf: false
+
+    # Guard against a stalled/late IMU sample blowing up one predict step.
+    max_predict_dt: 0.1
+
+    # IMU continuous-time noise densities + bias random walk. Placeholders
+    # from the BMI088 datasheet; replace with values estimated from a static
+    # recording (same idea as bmi088_driver's linear/angular_velocity_variance).
+    accel_noise_density: 0.0019    # m/s^2 / sqrt(Hz)
+    gyro_noise_density: 0.00025    # rad/s / sqrt(Hz)
+    accel_bias_random_walk: 0.0006 # m/s^3 / sqrt(Hz)
+    gyro_bias_random_walk: 0.0001  # rad/s^2 / sqrt(Hz)
+    accel_bias_prior_variance: 1.0e-2  # (m/s^2)^2, initial bias uncertainty
+    gyro_bias_prior_variance: 1.0e-4   # (rad/s)^2, initial bias uncertainty
+
+    # gnss_driver does not populate /gnss/vel's twist covariance, so a fixed
+    # variance is used for the velocity update instead of trusting the message.
+    gnss_velocity_variance: 0.05   # (m/s)^2 per axis (east/north)
+    # Floor applied to NavSatFix.position_covariance diagonal so a
+    # near-zero/perfect-looking covariance can't make the filter overconfident.
+    gnss_position_variance_floor: 0.0004  # (0.02 m)^2
+    # IMU-to-GNSS-antenna offset in the body frame (metres). Measure the real
+    # baseline and set this for correct fusion if the antenna isn't co-located
+    # with the IMU.
+    gnss_lever_arm_body: [0.0, 0.0, 0.0]
+    # How stale a cached /gnss/vel sample can be and still seed initialization.
+    gnss_vel_max_age_s: 1.0
+
+    # Coarse alignment at first fix: seed yaw from GNSS course-over-ground if
+    # already moving faster than this; otherwise yaw starts at 0 with a large
+    # variance (heading is only weakly observable from GNSS pos/vel alone -
+    # see README "Known limitations").
+    initial_yaw_from_velocity_min_speed: 0.5   # m/s
+    initial_velocity_variance_fallback: 4.0    # (m/s)^2, used when no recent /gnss/vel
+    initial_roll_pitch_std_deg: 5.0    # coarse accel-leveling accuracy
+    initial_yaw_std_deg_unseeded: 180.0
+    initial_yaw_std_deg_seeded: 15.0

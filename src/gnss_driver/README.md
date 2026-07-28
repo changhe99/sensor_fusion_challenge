@@ -34,7 +34,28 @@ test/test_zed_f9p.py
 - **`/gnss/vel`** (`geometry_msgs/TwistWithCovarianceStamped`, optional) —
   horizontal velocity in a local **ENU** frame, derived from NMEA speed/course
   over ground (`linear.x` = East, `linear.y` = North). NMEA carries no vertical
-  rate, so `linear.z` = 0.
+  rate, so `linear.z` = 0. Not published while there is no position fix.
+
+### While the receiver has no fix
+
+`/gnss/fix` keeps publishing at the receiver's GGA rate with
+`status.status = STATUS_NO_FIX` (`-1`) and `latitude`/`longitude`/`altitude`
+set to **NaN**. Consumers must check `status.status` before reading the
+coordinates (`ekf_fusion`'s EKF does, and simply ignores these messages).
+
+This matters for debugging: a silent topic would make "receiver searching"
+look identical to "driver crashed" or "antenna unplugged". The node also logs
+the satellite count as it changes:
+
+```
+[gnss_node] fix quality -> NO FIX (0 sats)
+[gnss_node] acquiring: 4 satellites visible
+```
+
+**0 satellites that never budges** means no RF is reaching the receiver —
+antenna not connected, bad cable, or no sky view (a ZED-F9P indoors will
+typically sit at 0 forever). Satellites appearing but no fix yet just means
+give it more time.
 
 ## Transport paths
 

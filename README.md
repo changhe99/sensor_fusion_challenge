@@ -23,3 +23,10 @@ the same Ubuntu 22.04 container (`docker/Dockerfile`, `docker-compose.yml`):
 
 Both boards are CDC-ACM USB devices; enumeration order isn't guaranteed, so each
 driver defaults to a stable `/dev/serial/by-id/` path.
+
+## Fusion
+
+- [`ekf_fusion`](src/ekf_fusion/README.md) — custom error-state EKF fusing
+  `/imu/data_raw` + `/gnss/fix` + `/gnss/vel` into a `nav_msgs/Odometry`
+  estimate on `/odometry/filtered`. `ros2 launch ekf_fusion
+  fusion_demo.launch.py` brings up all three nodes together.

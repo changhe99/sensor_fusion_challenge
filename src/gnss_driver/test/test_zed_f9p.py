@@ -5,11 +5,14 @@ validation, the coordinate/altitude conversions, the GST -> covariance mapping,
 RTK quality decoding, and SOG/COG -> ENU velocity.
 """
 
+import math
+
 import pytest
 
 from gnss_driver.transport import Transport
 from gnss_driver.zed_f9p import (COV_TYPE_APPROXIMATED, COV_TYPE_DIAGONAL_KNOWN,
-                                 GGA_QUALITY_RTK_FIXED, ZedF9P, valid_checksum)
+                                 COV_TYPE_UNKNOWN, GGA_QUALITY_RTK_FIXED,
+                                 ZedF9P, valid_checksum)
 
 
 def nmea(body: str) -> str:
@@ -105,10 +108,40 @@ def test_vtg_velocity_to_enu():
     assert fix.velocity_north == pytest.approx(0.0, abs=1e-3)
 
 
-def test_no_fix_gga_yields_no_position():
-    # Quality 0 with empty lat/lon fields -> not a usable fix, poll returns None.
+def test_no_fix_gga_reports_searching_not_silence():
+    # Quality 0 with empty lat/lon: still reported, flagged position_valid=False
+    # with NaN coordinates, so the node can publish STATUS_NO_FIX instead of
+    # going silent. num_sv/HDOP are still parsed - they're the diagnostic.
     line = nmea('$GNGGA,172814.0,,,,,0,00,99.99,,M,,M,,')
-    assert ZedF9P(FakeSerial([line])).poll() is None
+    fix = ZedF9P(FakeSerial([line])).poll()
+    assert fix is not None
+    assert not fix.position_valid
+    assert not fix.has_fix
+    assert fix.num_sv == 0
+    assert fix.hdop == pytest.approx(99.99)
+    assert math.isnan(fix.latitude) and math.isnan(fix.longitude)
+    assert math.isnan(fix.altitude)
+    # No position -> covariance is meaningless and must stay UNKNOWN.
+    assert fix.position_covariance_type == COV_TYPE_UNKNOWN
+
+
+def test_no_fix_reports_satellites_being_acquired():
+    # Receiver sees satellites but hasn't solved a position yet - the state
+    # that tells you the antenna is fine and it just needs more time.
+    line = nmea('$GNGGA,172814.0,,,,,0,04,5.5,,M,,M,,')
+    fix = ZedF9P(FakeSerial([line])).poll()
+    assert not fix.position_valid
+    assert fix.num_sv == 4
+
+
+def test_no_fix_does_not_reuse_stale_velocity():
+    # A valid VTG followed by a position-less GGA must not attach the old
+    # velocity to a fix that has no position.
+    vtg = nmea('$GNVTG,90.0,T,,M,1.9438,N,3.6,K,D')
+    gga = nmea('$GNGGA,172814.0,,,,,0,00,99.99,,M,,M,,')
+    fix = ZedF9P(FakeSerial([vtg, gga])).poll()
+    assert not fix.position_valid
+    assert not fix.velocity_valid
 
 
 def test_poll_returns_newest_of_multiple_fixes():

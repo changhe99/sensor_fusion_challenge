@@ -9,6 +9,12 @@ BMI088 IMU stream.
 Unlike the IMU node (which polls a register at a fixed rate), GNSS is
 event-driven: the receiver emits sentences on its own schedule, so the timer
 here just drains whatever has arrived and publishes when a new fix completes.
+
+When the receiver is streaming but has no position yet (no satellites, no sky
+view, disconnected antenna), a NavSatFix is still published with
+``status.status = STATUS_NO_FIX`` and NaN coordinates, and the satellite count
+is logged as it changes. Staying silent in that state makes a searching
+receiver indistinguishable from a dead driver.
 """
 
 from __future__ import annotations
@@ -66,6 +72,7 @@ class GnssNode(Node):
         # Log RTK state transitions (No fix / SPS / DGPS / RTK float / RTK fix)
         # rather than every message, so the operator sees convergence at a glance.
         self._last_quality = None
+        self._last_num_sv = None
 
         self._timer = self.create_timer(1.0 / rate, self._on_timer)
 
@@ -80,7 +87,7 @@ class GnssNode(Node):
 
         stamp = self.get_clock().now().to_msg()
         self._publish_fix(fix, stamp)
-        if self._vel_pub is not None and fix.velocity_valid:
+        if self._vel_pub is not None and fix.velocity_valid and fix.position_valid:
             self._publish_velocity_msg(fix, stamp)
         self._log_quality(fix)
 
@@ -89,7 +96,12 @@ class GnssNode(Node):
         msg.header.stamp = stamp
         msg.header.frame_id = self._frame_id
 
-        msg.status.status = self._nav_status(fix.quality)
+        # A fix with no position is still published, as STATUS_NO_FIX with NaN
+        # coordinates, so "receiver searching" is visible on the topic instead
+        # of looking identical to "driver dead". Consumers must check status
+        # before touching latitude/longitude (the EKF in ekf_fusion does).
+        msg.status.status = (self._nav_status(fix.quality) if fix.position_valid
+                             else NavSatStatus.STATUS_NO_FIX)
         # Multi-band, multi-constellation receiver: GPS | GLONASS | Galileo | BeiDou.
         msg.status.service = (NavSatStatus.SERVICE_GPS
                               | NavSatStatus.SERVICE_GLONASS
@@ -131,6 +143,13 @@ class GnssNode(Node):
                 f"fix quality -> {names.get(fix.quality, fix.quality)} "
                 f"({fix.num_sv} sats)")
             self._last_quality = fix.quality
+            self._last_num_sv = fix.num_sv
+        elif not fix.position_valid and fix.num_sv != self._last_num_sv:
+            # Still searching: the satellite count is the one number that says
+            # whether the antenna sees sky at all. Logged only when it changes,
+            # so a stuck-at-zero antenna is obvious without spamming.
+            self.get_logger().info(f'acquiring: {fix.num_sv} satellites visible')
+            self._last_num_sv = fix.num_sv
 
     def destroy_node(self) -> bool:
         try:

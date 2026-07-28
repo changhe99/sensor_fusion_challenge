@@ -10,10 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-pip \
         python3-colcon-common-extensions \
         python3-serial \
+        python3-numpy \
         build-essential \
         libusb-1.0-0 \
         udev \
         ros-humble-sensor-msgs \
+        ros-humble-nav-msgs \
+        ros-humble-tf2-ros \
         ros-humble-imu-filter-madgwick \
     && rm -rf /var/lib/apt/lists/*
 
